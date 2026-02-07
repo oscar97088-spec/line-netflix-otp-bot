@@ -11,6 +11,11 @@ from gmail_read import get_netflix_otp  # 確保 gmail_read.py 真的有這個�
 
 app = Flask(__name__)
 
+@app.get("/")
+def health():
+    return "OK", 200
+
+
 # ✅ 一定要先讀環境變數
 LINE_CHANNEL_ACCESS_TOKEN = os.getenv("LINE_CHANNEL_ACCESS_TOKEN")
 LINE_CHANNEL_SECRET = os.getenv("LINE_CHANNEL_SECRET")
