@@ -6,13 +6,9 @@ from typing import Optional, Tuple
 
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
-from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 
 SCOPES = ["https://www.googleapis.com/auth/gmail.readonly"]
-
-CLIENT_SECRET_FILE = "google_oauth.json"   # 確認檔名
-TOKEN_FILE = "token.json"
 
 
 def extract_otp(text: str) -> Optional[str]:
@@ -62,20 +58,33 @@ def get_text_from_payload(payload: dict) -> str:
 
 
 def get_gmail_service():
-    creds = None
+    """
+    ✅ Render/雲端專用：用環境變數建立 Gmail API 憑證
+    需要在 Render 設定：
+      - GOOGLE_CLIENT_ID
+      - GOOGLE_CLIENT_SECRET
+      - GOOGLE_REFRESH_TOKEN
+    """
+    client_id = os.getenv("GOOGLE_CLIENT_ID")
+    client_secret = os.getenv("GOOGLE_CLIENT_SECRET")
+    refresh_token = os.getenv("GOOGLE_REFRESH_TOKEN")
 
-    if os.path.exists(TOKEN_FILE):
-        creds = Credentials.from_authorized_user_file(TOKEN_FILE, SCOPES)
+    if not client_id or not client_secret or not refresh_token:
+        raise RuntimeError(
+            "Missing env vars: GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET / GOOGLE_REFRESH_TOKEN"
+        )
 
-    if not creds or not creds.valid:
-        if creds and creds.expired and creds.refresh_token:
-            creds.refresh(Request())
-        else:
-            flow = InstalledAppFlow.from_client_secrets_file(CLIENT_SECRET_FILE, SCOPES)
-            creds = flow.run_local_server(port=0)
+    creds = Credentials(
+        token=None,
+        refresh_token=refresh_token,
+        token_uri="https://oauth2.googleapis.com/token",
+        client_id=client_id,
+        client_secret=client_secret,
+        scopes=SCOPES,
+    )
 
-        with open(TOKEN_FILE, "w", encoding="utf-8") as f:
-            f.write(creds.to_json())
+    # 用 refresh token 換 access token
+    creds.refresh(Request())
 
     return build("gmail", "v1", credentials=creds)
 
