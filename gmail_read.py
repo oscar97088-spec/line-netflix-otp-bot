@@ -4,9 +4,9 @@ import re
 import base64
 from typing import Optional, Tuple
 
-from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
+from google.auth.transport.requests import Request
 
 SCOPES = ["https://www.googleapis.com/auth/gmail.readonly"]
 
@@ -59,11 +59,11 @@ def get_text_from_payload(payload: dict) -> str:
 
 def get_gmail_service():
     """
-    ✅ Render/雲端專用：用環境變數建立 Gmail API 憑證
-    需要在 Render 設定：
-      - GOOGLE_CLIENT_ID
-      - GOOGLE_CLIENT_SECRET
-      - GOOGLE_REFRESH_TOKEN
+    Render / 雲端環境：用 env 的 refresh token 換 access token
+    需要三個環境變數：
+      GOOGLE_CLIENT_ID
+      GOOGLE_CLIENT_SECRET
+      GOOGLE_REFRESH_TOKEN
     """
     client_id = os.getenv("GOOGLE_CLIENT_ID")
     client_secret = os.getenv("GOOGLE_CLIENT_SECRET")
@@ -71,11 +71,11 @@ def get_gmail_service():
 
     if not client_id or not client_secret or not refresh_token:
         raise RuntimeError(
-            "Missing env vars: GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET / GOOGLE_REFRESH_TOKEN"
+            "缺少環境變數：GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET / GOOGLE_REFRESH_TOKEN"
         )
 
     creds = Credentials(
-        token=None,
+        None,
         refresh_token=refresh_token,
         token_uri="https://oauth2.googleapis.com/token",
         client_id=client_id,
@@ -83,7 +83,7 @@ def get_gmail_service():
         scopes=SCOPES,
     )
 
-    # 用 refresh token 換 access token
+    # 這行會用 refresh_token 去換新的 access token
     creds.refresh(Request())
 
     return build("gmail", "v1", credentials=creds)
@@ -149,18 +149,3 @@ def get_netflix_otp() -> Optional[str]:
     """只回傳 OTP（找不到回 None），給 LINE Bot 用"""
     otp, _, _ = find_latest_netflix_otp()
     return otp
-
-
-def main():
-    otp, from_, subject = find_latest_netflix_otp()
-    if not otp:
-        print("找不到 Netflix 的 4 碼驗證碼（寄件人 info@account.netflix.com）。")
-        return
-
-    print("✅ From:", from_)
-    print("✅ Subject:", subject)
-    print("🎯 Netflix 驗證碼：", otp)
-
-
-if __name__ == "__main__":
-    main()
