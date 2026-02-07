@@ -3,20 +3,15 @@ import os
 import re
 import base64
 from typing import Optional, Tuple
+from datetime import datetime, timezone, timedelta
 
 from google.oauth2.credentials import Credentials
 from google.auth.transport.requests import Request
 from googleapiclient.discovery import build
 
-# 只讀 Gmail
 SCOPES = ["https://www.googleapis.com/auth/gmail.readonly"]
 
-NETFLIX_SENDER = "info@account.netflix.com"
 
-
-# -------------------------
-# 工具函式
-# -------------------------
 def extract_otp(text: str) -> Optional[str]:
     if not text:
         return None
@@ -27,9 +22,7 @@ def extract_otp(text: str) -> Optional[str]:
 def decode_base64url(data: str) -> str:
     if not data:
         return ""
-    return base64.urlsafe_b64decode(data.encode("utf-8")).decode(
-        "utf-8", errors="ignore"
-    )
+    return base64.urlsafe_b64decode(data.encode()).decode(errors="ignore")
 
 
 def get_text_from_payload(payload: dict) -> str:
@@ -46,25 +39,16 @@ def get_text_from_payload(payload: dict) -> str:
         for p in parts:
             mime = p.get("mimeType", "")
             data = p.get("body", {}).get("data")
-
             if data and mime in ("text/plain", "text/html"):
                 texts.append(decode_base64url(data))
-
             if p.get("parts"):
                 walk(p["parts"])
 
     walk(payload.get("parts", []))
-    return "\n".join(texts).strip()
+    return "\n".join(texts)
 
 
-# -------------------------
-# Gmail Service（關鍵）
-# -------------------------
 def get_gmail_service():
-    """
-    ❗ Render / 雲端專用
-    使用 refresh token，不用任何 json 檔
-    """
     creds = Credentials(
         token=None,
         refresh_token=os.environ["GOOGLE_REFRESH_TOKEN"],
@@ -74,66 +58,38 @@ def get_gmail_service():
         scopes=SCOPES,
     )
 
-    # 取得 access token
     creds.refresh(Request())
-
     return build("gmail", "v1", credentials=creds)
 
 
-# -------------------------
-# 主要邏輯
-# -------------------------
-def find_latest_netflix_otp(
-    max_results: int = 10,
-) -> Tuple[Optional[str], Optional[str], Optional[str]]:
+def find_latest_netflix_otp(max_results: int = 10) -> Tuple[Optional[str], Optional[str], Optional[str]]:
     service = get_gmail_service()
 
-    results = (
-        service.users()
-        .messages()
-        .list(
-            userId="me",
-            q=f"from:({NETFLIX_SENDER})",
-            maxResults=max_results,
-        )
-        .execute()
-    )
+    query = "from:(info@account.netflix.com)"
+    results = service.users().messages().list(
+        userId="me", q=query, maxResults=max_results
+    ).execute()
 
     messages = results.get("messages", [])
     if not messages:
         return None, None, None
 
     for msg in messages:
-        msg_id = msg["id"]
+        full = service.users().messages().get(
+            userId="me", id=msg["id"], format="full"
+        ).execute()
 
-        meta = (
-            service.users()
-            .messages()
-            .get(
-                userId="me",
-                id=msg_id,
-                format="metadata",
-                metadataHeaders=["From", "Subject"],
-            )
-            .execute()
-        )
+        headers = full.get("payload", {}).get("headers", [])
+        hmap = {h["name"]: h["value"] for h in headers}
+        subject = hmap.get("Subject", "")
+        from_ = hmap.get("From", "")
 
-        headers = meta.get("payload", {}).get("headers", [])
-        h = {x["name"]: x["value"] for x in headers}
-        from_ = h.get("From", "")
-        subject = h.get("Subject", "")
-
+        # 先從標題找
         otp = extract_otp(subject)
         if otp:
             return otp, from_, subject
 
-        full = (
-            service.users()
-            .messages()
-            .get(userId="me", id=msg_id, format="full")
-            .execute()
-        )
-
+        # 再從內文找
         text = get_text_from_payload(full.get("payload", {}))
         otp = extract_otp(text)
         if otp:
