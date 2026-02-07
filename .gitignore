@@ -1,0 +1,19 @@
+cat > .gitignore << 'EOF'
+# Python / venv
+.venv/
+__pycache__/
+*.pyc
+
+# JetBrains
+.idea/
+
+# Secrets (Gmail OAuth / tokens)
+line_netflix_otp_bot/google_oauth.json
+line_netflix_otp_bot/token.json
+EOF
+token.json
+google_oauth.json
+.venv/
+.idea/
+__pycache__/
+*.pyc
